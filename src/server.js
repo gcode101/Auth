@@ -11,8 +11,30 @@ const server = express();
 // to enable parsing of json bodies for post requests
 server.use(bodyParser.json());
 server.use(session({
-  secret: 'e5SPiqsEtjexkTj3Xqovsjzq8ovjfgVDFMfUzSmJO21dtXs4re'
+  secret: 'e5SPiqsEtjexkTj3Xqovsjzq8ovjfgVDFMfUzSmJO21dtXs4re',
+  saveUninitialized: true,
+  resave: true
 }));
+
+const loggedIn = (req, res, next) => {
+  const { userId } = req.session;
+  if (!userId) {
+    sendUserError('You are not logged in.', res);
+    return;
+  }
+  User.findById(userId)
+    .then((user) => {
+      req.user = user;
+      next();
+    })
+    .catch((err) => {
+      res.status(500).json({ error: `Could not connect to the server: ${err}` });
+    });
+};
+
+server.use('/restricted', loggedIn, (req, res, next) => {
+  next();
+});
 
 /* Sends the given err, a string or an object, to the client. Sets the status
  * code appropriately. */
@@ -75,21 +97,19 @@ server.post('/log-in', (req, res) => {
     });
 });
 
-const loggedIn = (req, res, next) => {
-  const { userId } = req.session;
-  if (!userId) {
-    sendUserError('You are not logged in.', res);
-    return;
-  }
-  User.findById(userId)
-    .then((user) => {
-      req.user = user;
-      next();
-    })
-    .catch((err) => {
-      res.status(500).json({ error: `Could not connect to the server: ${err}` });
-    });
-};
+server.post('/logout', (req, res) => {
+  req.session.destroy(function(err) {
+    if (err) {
+      res.status(500).json({ error: `Could not end session: ${err}` });
+    } else {
+      res.status(200).json({ success: true });
+    }
+  });
+});
+
+server.get('/restricted/users', (req, res) => {
+  res.status(200).json({ access: true });
+})
 
 // TODO: add local middleware to this route to ensure the user is logged in
 server.get('/me', loggedIn, (req, res) => {
